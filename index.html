@@ -34,6 +34,8 @@
   li { padding: 10px 0; border-bottom: 1px solid var(--line); }
   .name { font-weight: 600; }
   .meta { color: var(--muted); font-size: 13px; word-break: break-all; }
+  #scanList li { cursor: pointer; }
+  label { display: block; margin: 4px 0 8px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -43,6 +45,7 @@
   <button id="scanBtn">Scan nearby</button>
   <button id="stopBtn" disabled>Stop</button>
   <button id="pickBtn">Pick and connect</button>
+  <label><input type="checkbox" id="showUnnamed"> Show unnamed devices</label>
 
   <ul id="list"></ul>
 
@@ -64,17 +67,47 @@ if (!navigator.bluetooth) {
 }
 
 // --- Option 1: continuous scan of advertisements ---------------------------
+// Nicknames you give devices, remembered on this phone.
+const nicknames = loadNicknames();
+function loadNicknames() {
+  try { return JSON.parse(localStorage.getItem('bleNicknames')) || {}; } catch { return {}; }
+}
+function saveNicknames() {
+  try { localStorage.setItem('bleNicknames', JSON.stringify(nicknames)); } catch {}
+}
+function friendlyName(id, advertisedName) {
+  return nicknames[id] || advertisedName || null;
+}
+
+document.getElementById('showUnnamed').onchange = render;
+
 function render() {
-  const rows = [...seen.values()].sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
+  const showUnnamed = document.getElementById('showUnnamed').checked;
+  const rows = [...seen.values()]
+    .filter(d => showUnnamed || friendlyName(d.id, d.name))
+    .sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
+  listEl.id = 'scanList';
   listEl.innerHTML = '';
   for (const d of rows) {
     const li = document.createElement('li');
     li.innerHTML = `<div class="name"></div><div class="meta"></div>`;
-    li.querySelector('.name').textContent = d.name || '(no name)';
+    li.querySelector('.name').textContent = friendlyName(d.id, d.name) || 'Unnamed device';
     li.querySelector('.meta').textContent =
-      `RSSI ${d.rssi ?? '?'} dBm · ${d.id}` + (d.uuids.length ? ` · ${d.uuids.join(', ')}` : '');
+      `Signal ${d.rssi ?? '?'} dBm` +
+      (nicknames[d.id] && d.name ? ` · advertises as "${d.name}"` : '') +
+      ' · tap to rename';
+    li.onclick = () => rename(d.id, d.name);
     listEl.appendChild(li);
   }
+}
+
+function rename(id, advertisedName) {
+  const n = prompt('Nickname for this device (leave empty to clear):',
+                   nicknames[id] || advertisedName || '');
+  if (n === null) return;
+  if (n.trim()) nicknames[id] = n.trim(); else delete nicknames[id];
+  saveNicknames();
+  render();
 }
 
 scanBtn.onclick = async () => {
@@ -111,6 +144,16 @@ stopBtn.onclick = () => {
 };
 
 // --- Option 2: pick one device from the system chooser, connect, list services ---
+// Names for standard Bluetooth services. Add your own device's UUIDs here too.
+const std = n => `0000${n}-0000-1000-8000-00805f9b34fb`;
+const SERVICE_NAMES = {
+  [std('180f')]: 'Battery',
+  [std('180a')]: 'Device information',
+  [std('180d')]: 'Heart rate',
+  [std('181a')]: 'Environmental sensing',
+  [std('1800')]: 'Generic access',
+  [std('1801')]: 'Generic attribute'
+};
 pickBtn.onclick = async () => {
   try {
     const device = await navigator.bluetooth.requestDevice({
@@ -119,18 +162,21 @@ pickBtn.onclick = async () => {
       // Add your own device's service UUIDs to this array.
       optionalServices: ['battery_service', 'device_information', 'heart_rate']
     });
-    setStatus(`Connecting to ${device.name || device.id}…`);
+    const name = friendlyName(device.id, device.name) || 'Unnamed device';
+    setStatus(`Connecting to ${name}…`);
     const server = await device.gatt.connect();
     const services = await server.getPrimaryServices();
 
+    listEl.id = 'list';
     listEl.innerHTML = '';
     for (const s of services) {
       const li = document.createElement('li');
-      li.innerHTML = `<div class="name">Service</div><div class="meta"></div>`;
+      li.innerHTML = `<div class="name"></div><div class="meta"></div>`;
+      li.querySelector('.name').textContent = SERVICE_NAMES[s.uuid] || 'Custom service';
       li.querySelector('.meta').textContent = s.uuid;
       listEl.appendChild(li);
     }
-    setStatus(`Connected to ${device.name || device.id}. ${services.length} service(s) visible.`);
+    setStatus(`Connected to ${name}. ${services.length} service(s) visible.`);
   } catch (err) {
     setStatus('Stopped: ' + err.message);
   }
