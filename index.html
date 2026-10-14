@@ -1,24 +1,140 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Hello World!!</title>
-    <style>
-        table { border-collapse: collapse; }
-        table, th, td { border: 1px solid black; }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BLE Scan</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1c1c1e; --muted: #6e6e73; --line: #d8d8dc;
+    --accent: #0a66d8; --accent-fg: #ffffff;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000; --fg: #f2f2f7; --muted: #98989f; --line: #38383a;
+      --accent: #4c9bff; --accent-fg: #000000;
+      color-scheme: dark;
+    }
+  }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.4 -apple-system, system-ui, sans-serif;
+    padding: env(safe-area-inset-top, 0) 16px env(safe-area-inset-bottom, 0);
+  }
+  h1 { font-size: 22px; margin: 20px 0 4px; }
+  #status { color: var(--muted); margin: 0 0 16px; }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 10px;
+    padding: 12px 16px; margin: 0 8px 8px 0;
+    background: var(--accent); color: var(--accent-fg);
+  }
+  button:disabled { opacity: 0.4; }
+  ul { list-style: none; padding: 0; margin: 8px 0; }
+  li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .name { font-weight: 600; }
+  .meta { color: var(--muted); font-size: 13px; word-break: break-all; }
+</style>
 </head>
-
 <body>
-    <h1>Hello World!</h1>
+  <h1>BLE Scan</h1>
+  <p id="status">Tap a button to start.</p>
 
-    We are using Node.js <span id="node-version"></span>, Chromium <span id="chrome-version"></span>, Electron <span id="electron-version"></span>, and Serialport <span id="serialport-version"></span>
+  <button id="scanBtn">Scan nearby</button>
+  <button id="stopBtn" disabled>Stop</button>
+  <button id="pickBtn">Pick and connect</button>
 
-    <div id="error"></div>
-    <div id="ports"></div>
+  <ul id="list"></ul>
+
+<script>
+const statusEl = document.getElementById('status');
+const listEl = document.getElementById('list');
+const scanBtn = document.getElementById('scanBtn');
+const stopBtn = document.getElementById('stopBtn');
+const pickBtn = document.getElementById('pickBtn');
+
+const seen = new Map();   // device id -> latest advertisement info
+let scan = null;
+
+function setStatus(text) { statusEl.textContent = text; }
+
+if (!navigator.bluetooth) {
+  setStatus('Web Bluetooth isn\'t available here. Open this page in Bluefy.');
+  scanBtn.disabled = pickBtn.disabled = true;
+}
+
+// --- Option 1: continuous scan of advertisements ---------------------------
+function render() {
+  const rows = [...seen.values()].sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
+  listEl.innerHTML = '';
+  for (const d of rows) {
+    const li = document.createElement('li');
+    li.innerHTML = `<div class="name"></div><div class="meta"></div>`;
+    li.querySelector('.name').textContent = d.name || '(no name)';
+    li.querySelector('.meta').textContent =
+      `RSSI ${d.rssi ?? '?'} dBm · ${d.id}` + (d.uuids.length ? ` · ${d.uuids.join(', ')}` : '');
+    listEl.appendChild(li);
+  }
+}
+
+scanBtn.onclick = async () => {
+  if (!navigator.bluetooth.requestLEScan) {
+    setStatus('Continuous scanning isn\'t supported here. Use "Pick and connect" instead.');
+    return;
+  }
+  try {
+    seen.clear(); render();
+    navigator.bluetooth.addEventListener('advertisementreceived', onAdvert);
+    scan = await navigator.bluetooth.requestLEScan({ acceptAllAdvertisements: true });
+    setStatus('Scanning…');
+    scanBtn.disabled = true; stopBtn.disabled = false;
+  } catch (err) {
+    setStatus('Scan failed: ' + err.message);
+  }
+};
+
+function onAdvert(e) {
+  seen.set(e.device.id, {
+    id: e.device.id,
+    name: e.name || e.device.name,
+    rssi: e.rssi,
+    uuids: e.uuids || []
+  });
+  render();
+}
+
+stopBtn.onclick = () => {
+  if (scan && scan.active) scan.stop();
+  navigator.bluetooth.removeEventListener('advertisementreceived', onAdvert);
+  setStatus(`Stopped. Found ${seen.size} device(s).`);
+  scanBtn.disabled = false; stopBtn.disabled = true;
+};
+
+// --- Option 2: pick one device from the system chooser, connect, list services ---
+pickBtn.onclick = async () => {
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      // Services must be listed here to be readable after connecting.
+      // Add your own device's service UUIDs to this array.
+      optionalServices: ['battery_service', 'device_information', 'heart_rate']
+    });
+    setStatus(`Connecting to ${device.name || device.id}…`);
+    const server = await device.gatt.connect();
+    const services = await server.getPrimaryServices();
+
+    listEl.innerHTML = '';
+    for (const s of services) {
+      const li = document.createElement('li');
+      li.innerHTML = `<div class="name">Service</div><div class="meta"></div>`;
+      li.querySelector('.meta').textContent = s.uuid;
+      listEl.appendChild(li);
+    }
+    setStatus(`Connected to ${device.name || device.id}. ${services.length} service(s) visible.`);
+  } catch (err) {
+    setStatus('Stopped: ' + err.message);
+  }
+};
+</script>
 </body>
-
-<script src="./renderer.js"></script>
-
 </html>
