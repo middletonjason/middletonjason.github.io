@@ -1,186 +1,185 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>BLE Scan</title>
+<title>IMS Ref Accel</title>
+<!--
+  Bluefy (Web Bluetooth) control app for the "IMS Ref Accel" firmware.
+  Must be served over HTTPS. No external dependencies.
+  BLE service and characteristic UUIDs must match src/BleService.h.
+-->
 <style>
-  :root {
-    --bg: #ffffff; --fg: #1c1c1e; --muted: #6e6e73; --line: #d8d8dc;
-    --accent: #0a66d8; --accent-fg: #ffffff;
-    color-scheme: light;
-  }
+  :root { color-scheme: light dark; --bg:#f6f7f9; --card:#fff; --fg:#1d1f23;
+          --muted:#667; --line:#dde1e6; --accent:#2f5fd0; --ok:#1f8a4c;
+          --bad:#b4410c; }
   @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #000000; --fg: #f2f2f7; --muted: #98989f; --line: #38383a;
-      --accent: #4c9bff; --accent-fg: #000000;
-      color-scheme: dark;
-    }
-  }
-  body {
-    margin: 0; background: var(--bg); color: var(--fg);
-    font: 16px/1.4 -apple-system, system-ui, sans-serif;
-    padding: env(safe-area-inset-top, 0) 16px env(safe-area-inset-bottom, 0);
-  }
-  h1 { font-size: 22px; margin: 20px 0 4px; }
-  #status { color: var(--muted); margin: 0 0 16px; }
-  button {
-    font: inherit; font-weight: 600; border: 0; border-radius: 10px;
-    padding: 12px 16px; margin: 0 8px 8px 0;
-    background: var(--accent); color: var(--accent-fg);
-  }
-  button:disabled { opacity: 0.4; }
-  ul { list-style: none; padding: 0; margin: 8px 0; }
-  li { padding: 10px 0; border-bottom: 1px solid var(--line); }
-  .name { font-weight: 600; }
-  .meta { color: var(--muted); font-size: 13px; word-break: break-all; }
-  #scanList li { cursor: pointer; }
-  label { display: block; margin: 4px 0 8px; color: var(--muted); }
+    :root { --bg:#15171a; --card:#1e2126; --fg:#e8eaed; --muted:#9aa3ad;
+            --line:#30353c; --accent:#6e9bff; --ok:#4cc38a; --bad:#ff8a4c; } }
+  body { margin:0; font:16px/1.45 -apple-system, system-ui, sans-serif;
+         background:var(--bg); color:var(--fg); }
+  main { max-width:520px; margin:0 auto;
+         padding:calc(16px + env(safe-area-inset-top)) 16px 32px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 16px; font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line);
+          border-radius:12px; padding:16px; margin-bottom:16px; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  dl { display:grid; grid-template-columns:max-content 1fr; gap:8px 16px;
+       margin:0; }
+  dt { color:var(--muted); }
+  dd { margin:0; font-variant-numeric:tabular-nums; text-align:right; }
+  button { font:inherit; width:100%; padding:12px; border-radius:10px;
+           border:1px solid var(--accent); background:var(--accent);
+           color:#fff; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--accent); }
+  button:disabled { opacity:.5; }
+  .row { display:flex; gap:10px; }
+  .row button { flex:1; }
+  .pill { display:inline-block; padding:2px 10px; border-radius:999px;
+          font-size:13px; border:1px solid var(--line); }
+  .pill.ok { color:var(--ok); border-color:var(--ok); }
+  .pill.bad { color:var(--bad); border-color:var(--bad); }
+  #msg { margin-top:10px; font-size:14px; color:var(--muted); min-height:1.4em; }
 </style>
 </head>
 <body>
-  <h1>BLE Scan</h1>
-  <p id="status">Tap a button to start.</p>
+<main>
+  <h1>IMS Ref Accel</h1>
+  <p class="sub">Bluetooth control &middot; <span id="state" class="pill">disconnected</span></p>
 
-  <button id="scanBtn">Scan nearby</button>
-  <button id="stopBtn" disabled>Stop</button>
-  <button id="pickBtn">Pick and connect</button>
-  <label><input type="checkbox" id="showUnnamed"> Show unnamed devices</label>
+  <section class="card" id="connectCard">
+    <button id="connect">Connect</button>
+    <div id="msg"></div>
+  </section>
 
-  <ul id="list"></ul>
+  <section class="card" id="timeCard" hidden>
+    <h2>Date &amp; time</h2>
+    <dl>
+      <dt>Device time</dt><dd id="devtime">&ndash;</dd>
+      <dt>Set by</dt><dd id="timesrc">&ndash;</dd>
+      <dt>vs this phone</dt><dd id="timeoff">&ndash;</dd>
+    </dl>
+    <p style="margin:14px 0 0"><button id="sync" class="secondary">Sync time from this phone</button></p>
+  </section>
 
+  <section class="card" id="devCard" hidden>
+    <h2>Device</h2>
+    <dl>
+      <dt>Board</dt><dd id="board">&ndash;</dd>
+      <dt>Firmware</dt><dd id="fw">&ndash;</dd>
+      <dt>Accelerometer</dt><dd id="sensor">&ndash;</dd>
+      <dt>Uptime</dt><dd id="uptime">&ndash;</dd>
+    </dl>
+    <p style="margin:14px 0 0"><button id="disconnect" class="secondary">Disconnect</button></p>
+  </section>
+</main>
 <script>
-const statusEl = document.getElementById('status');
-const listEl = document.getElementById('list');
-const scanBtn = document.getElementById('scanBtn');
-const stopBtn = document.getElementById('stopBtn');
-const pickBtn = document.getElementById('pickBtn');
+const SVC    = '5ecd0001-6499-44aa-bd1d-a87a8822b773';
+const STATUS = '5ecd0002-6499-44aa-bd1d-a87a8822b773';
+const TIME   = '5ecd0003-6499-44aa-bd1d-a87a8822b773';
 
-const seen = new Map();   // device id -> latest advertisement info
-let scan = null;
+const $ = id => document.getElementById(id);
+let device = null, chStatus = null, chTime = null, pollTimer = null;
 
-function setStatus(text) { statusEl.textContent = text; }
+function setState(text, cls) {
+  $('state').textContent = text;
+  $('state').className = 'pill' + (cls ? ' ' + cls : '');
+}
+function msg(t) { $('msg').textContent = t; }
 
-if (!navigator.bluetooth) {
-  setStatus('Web Bluetooth isn\'t available here. Open this page in Bluefy.');
-  scanBtn.disabled = pickBtn.disabled = true;
+function fmtUptime(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
+        m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return (d ? d + 'd ' : '') + (h ? h + 'h ' : '') + m + 'm ' + sec + 's';
 }
 
-// --- Option 1: continuous scan of advertisements ---------------------------
-// Nicknames you give devices, remembered on this phone.
-const nicknames = loadNicknames();
-function loadNicknames() {
-  try { return JSON.parse(localStorage.getItem('bleNicknames')) || {}; } catch { return {}; }
-}
-function saveNicknames() {
-  try { localStorage.setItem('bleNicknames', JSON.stringify(nicknames)); } catch {}
-}
-function friendlyName(id, advertisedName) {
-  return nicknames[id] || advertisedName || null;
-}
-
-document.getElementById('showUnnamed').onchange = render;
-
-function render() {
-  const showUnnamed = document.getElementById('showUnnamed').checked;
-  const rows = [...seen.values()]
-    .filter(d => showUnnamed || friendlyName(d.id, d.name))
-    .sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
-  listEl.id = 'scanList';
-  listEl.innerHTML = '';
-  for (const d of rows) {
-    const li = document.createElement('li');
-    li.innerHTML = `<div class="name"></div><div class="meta"></div>`;
-    li.querySelector('.name').textContent = friendlyName(d.id, d.name) || 'Unnamed device';
-    li.querySelector('.meta').textContent =
-      `Signal ${d.rssi ?? '?'} dBm` +
-      (nicknames[d.id] && d.name ? ` · advertises as "${d.name}"` : '') +
-      ' · tap to rename';
-    li.onclick = () => rename(d.id, d.name);
-    listEl.appendChild(li);
-  }
-}
-
-function rename(id, advertisedName) {
-  const n = prompt('Nickname for this device (leave empty to clear):',
-                   nicknames[id] || advertisedName || '');
-  if (n === null) return;
-  if (n.trim()) nicknames[id] = n.trim(); else delete nicknames[id];
-  saveNicknames();
-  render();
-}
-
-scanBtn.onclick = async () => {
-  if (!navigator.bluetooth.requestLEScan) {
-    setStatus('Continuous scanning isn\'t supported here. Use "Pick and connect" instead.');
+async function connect() {
+  if (!navigator.bluetooth) {
+    msg('Web Bluetooth is not available. On iPhone, open this page in the Bluefy app.');
     return;
   }
+  $('connect').disabled = true;
   try {
-    seen.clear(); render();
-    navigator.bluetooth.addEventListener('advertisementreceived', onAdvert);
-    scan = await navigator.bluetooth.requestLEScan({ acceptAllAdvertisements: true });
-    setStatus('Scanning…');
-    scanBtn.disabled = true; stopBtn.disabled = false;
-  } catch (err) {
-    setStatus('Scan failed: ' + err.message);
+    msg('Choose "IMS Ref Accel"…');
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{services: [SVC]}, {namePrefix: 'IMS Ref'}],
+      optionalServices: [SVC]});
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+    setState('connecting…');
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SVC);
+    chStatus = await svc.getCharacteristic(STATUS);
+    chTime = await svc.getCharacteristic(TIME);
+    setState('connected', 'ok');
+    msg('');
+    $('connectCard').hidden = true;
+    $('timeCard').hidden = false;
+    $('devCard').hidden = false;
+    await syncTime();          // always set the clock on connect
+    await readStatus();
+    pollTimer = setInterval(readStatus, 2000);
+  } catch (e) {
+    setState('disconnected', 'bad');
+    msg(e.name === 'NotFoundError' ? 'No device selected.' : 'Connect failed: ' + e.message);
+  } finally {
+    $('connect').disabled = false;
   }
-};
-
-function onAdvert(e) {
-  seen.set(e.device.id, {
-    id: e.device.id,
-    name: e.name || e.device.name,
-    rssi: e.rssi,
-    uuids: e.uuids || []
-  });
-  render();
 }
 
-stopBtn.onclick = () => {
-  if (scan && scan.active) scan.stop();
-  navigator.bluetooth.removeEventListener('advertisementreceived', onAdvert);
-  setStatus(`Stopped. Found ${seen.size} device(s).`);
-  scanBtn.disabled = false; stopBtn.disabled = true;
-};
+async function syncTime() {
+  if (!chTime) return;
+  const buf = new DataView(new ArrayBuffer(8));
+  buf.setBigUint64(0, BigInt(Date.now()), true);   // little-endian ms
+  await chTime.writeValue(buf);
+}
 
-// --- Option 2: pick one device from the system chooser, connect, list services ---
-// Names for standard Bluetooth services. Add your own device's UUIDs here too.
-const std = n => `0000${n}-0000-1000-8000-00805f9b34fb`;
-const SERVICE_NAMES = {
-  [std('180f')]: 'Battery',
-  [std('180a')]: 'Device information',
-  [std('180d')]: 'Heart rate',
-  [std('181a')]: 'Environmental sensing',
-  [std('1800')]: 'Generic access',
-  [std('1801')]: 'Generic attribute'
-};
-pickBtn.onclick = async () => {
+async function readStatus() {
+  if (!chStatus) return;
   try {
-    const device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      // Services must be listed here to be readable after connecting.
-      // Add your own device's service UUIDs to this array.
-      optionalServices: ['battery_service', 'device_information', 'heart_rate']
-    });
-    const name = friendlyName(device.id, device.name) || 'Unnamed device';
-    setStatus(`Connecting to ${name}…`);
-    const server = await device.gatt.connect();
-    const services = await server.getPrimaryServices();
-
-    listEl.id = 'list';
-    listEl.innerHTML = '';
-    for (const s of services) {
-      const li = document.createElement('li');
-      li.innerHTML = `<div class="name"></div><div class="meta"></div>`;
-      li.querySelector('.name').textContent = SERVICE_NAMES[s.uuid] || 'Custom service';
-      li.querySelector('.meta').textContent = s.uuid;
-      listEl.appendChild(li);
+    const v = await chStatus.readValue();
+    const j = JSON.parse(new TextDecoder().decode(v));
+    $('board').textContent = j.board;
+    $('fw').textContent = j.fw;
+    $('sensor').textContent = j.sensor === 'none' ? 'not fitted' : j.sensor;
+    $('uptime').textContent = fmtUptime(j.uptime_s);
+    if (j.time_synced) {
+      const d = new Date(j.epoch_ms);
+      $('devtime').textContent = d.toLocaleString(undefined, {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+        second: '2-digit'});
+      $('timesrc').textContent = {web: 'web page (USB)', ble: 'Bluefy'}[j.time_source] || j.time_source;
+      // The status value is refreshed once per second on the device.
+      const off = (j.epoch_ms - Date.now()) / 1000;
+      $('timeoff').textContent = (off >= 0 ? '+' : '') + off.toFixed(1) + ' s';
+    } else {
+      $('devtime').textContent = 'not set';
+      $('timesrc').textContent = '–';
+      $('timeoff').textContent = '–';
     }
-    setStatus(`Connected to ${name}. ${services.length} service(s) visible.`);
-  } catch (err) {
-    setStatus('Stopped: ' + err.message);
+  } catch (e) {
+    /* transient read error; disconnect handler covers real drops */
   }
-};
+}
+
+function onDisconnected() {
+  clearInterval(pollTimer);
+  chStatus = chTime = null;
+  setState('disconnected', 'bad');
+  $('connectCard').hidden = false;
+  $('timeCard').hidden = true;
+  $('devCard').hidden = true;
+  msg('Disconnected.');
+}
+
+$('connect').addEventListener('click', connect);
+$('sync').addEventListener('click', async () => {
+  $('sync').disabled = true;
+  try { await syncTime(); await readStatus(); }
+  catch (e) { msg('Sync failed: ' + e.message); }
+  finally { $('sync').disabled = false; }
+});
+$('disconnect').addEventListener('click', () => device && device.gatt.disconnect());
 </script>
 </body>
 </html>
