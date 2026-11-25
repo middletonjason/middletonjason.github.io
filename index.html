@@ -69,6 +69,8 @@
       <dt>Board</dt><dd id="board">&ndash;</dd>
       <dt>Firmware</dt><dd id="fw">&ndash;</dd>
       <dt>Accelerometer</dt><dd id="sensor">&ndash;</dd>
+      <dt>Logger</dt><dd id="logger">&ndash;</dd>
+      <dt>Saved impacts</dt><dd id="impacts">&ndash;</dd>
       <dt>Uptime</dt><dd id="uptime">&ndash;</dd>
     </dl>
     <p style="margin:14px 0 0"><button id="disconnect" class="secondary">Disconnect</button></p>
@@ -143,6 +145,10 @@ async function readStatus() {
     $('fw').textContent = j.fw;
     $('sensor').textContent = j.sensor === 'none' ? 'not fitted' : j.sensor;
     $('uptime').textContent = fmtUptime(j.uptime_s);
+    // Fields added in fw 0.7.0 / 0.8.0; older firmware leaves them as dashes.
+    $('logger').textContent = j.logger || '–';
+    $('impacts').textContent = j.stored !== undefined
+      ? j.stored + ' / ' + j.capacity : '–';
     if (j.time_synced) {
       const d = new Date(j.epoch_ms);
       $('devtime').textContent = d.toLocaleString(undefined, {
