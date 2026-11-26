@@ -129,6 +129,7 @@
       <dt>Accelerometer</dt><dd id="sensor">&ndash;</dd>
       <dt>Logger</dt><dd id="logger">&ndash;</dd>
       <dt>Saved impacts</dt><dd id="impacts">&ndash;</dd>
+      <dt>Battery</dt><dd id="bat">&ndash;</dd>
       <dt>Uptime</dt><dd id="uptime">&ndash;</dd>
     </dl>
     <p style="margin:14px 0 0"><button id="disconnect" class="secondary">Disconnect</button></p>
@@ -437,6 +438,14 @@ async function readStatus() {
     $('logger').textContent = j.logger || '–';
     $('impacts').textContent = j.stored !== undefined
       ? j.stored + ' / ' + j.capacity : '–';
+    // fw 0.12.0+. The % is a voltage estimate, shown only on battery (the
+    // charger lifts the voltage on USB).
+    if (j.bat !== undefined) {
+      const v = (j.mv / 1000).toFixed(2) + ' V';
+      $('bat').textContent = j.bat === 'charging' ? 'charging (USB) · ' + v
+        : j.bat === 'charged' ? 'charged (USB) · ' + v
+        : j.pct + '% · ' + v + (j.low ? ' · LOW' : '');
+    }
     if (chList && j.stored !== undefined && j.stored !== listStored) {
       listStored = j.stored;
       readList();
