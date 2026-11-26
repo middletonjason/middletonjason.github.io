@@ -46,6 +46,20 @@
                font-variant-numeric:tabular-nums; }
   .thr label:has(input:checked) { border-color:var(--accent); color:var(--accent); }
   .note { margin:10px 0 0; font-size:13px; color:var(--muted); }
+  .ilist { list-style:none; margin:0; padding:0; }
+  .ilist li { display:flex; justify-content:space-between; gap:10px; padding:11px 4px;
+              border-bottom:1px solid var(--line); cursor:pointer;
+              font-variant-numeric:tabular-nums; }
+  .ilist li:last-child { border-bottom:0; }
+  .ilist li.sel { background:color-mix(in srgb, var(--accent) 12%, transparent); }
+  .ilist .pk { color:var(--muted); white-space:nowrap; }
+  canvas { width:100%; height:240px; display:block; margin-top:8px; }
+  .legend { display:flex; gap:14px; font-size:13px; color:var(--muted); margin-top:6px; }
+  .sw { display:inline-block; width:12px; height:3px; border-radius:2px; vertical-align:middle;
+        margin-right:4px; }
+  :root { --cx:#d63b3b; --cy:#1f8a4c; --cz:#2f5fd0; --grid:#eceff2; }
+  @media (prefers-color-scheme: dark) {
+    :root { --cx:#ff6b6b; --cy:#4cc38a; --cz:#6e9bff; --grid:#262a30; } }
   #msg { margin-top:10px; font-size:14px; color:var(--muted); min-height:1.4em; }
 </style>
 </head>
@@ -69,6 +83,26 @@
     </div>
     <p class="note" id="thrmsg">Deviation from the resting value, on any axis.
       Saved on the device.</p>
+  </section>
+
+  <section class="card" id="impCard" hidden>
+    <h2>Saved impacts <span id="impcount" class="note"></span></h2>
+    <ul class="ilist" id="ilist"></ul>
+    <p class="note" id="inone" hidden>No impacts saved yet.</p>
+  </section>
+
+  <section class="card" id="viewCard" hidden>
+    <h2 id="vtitle">Impact</h2>
+    <div class="note" id="vmeta" style="margin:0"></div>
+    <canvas id="vchart"></canvas>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--cx)"></i>X</span>
+      <span><i class="sw" style="background:var(--cy)"></i>Y</span>
+      <span><i class="sw" style="background:var(--cz)"></i>Z</span>
+    </div>
+    <p class="note">Outline view (min/max of each slice, so no spike is hidden). Full
+      resolution and CSV: web page over USB.</p>
+    <p style="margin:12px 0 0"><button id="vclose" class="secondary">Close</button></p>
   </section>
 
   <section class="card" id="timeCard" hidden>
@@ -99,9 +133,12 @@ const SVC    = '5ecd0001-6499-44aa-bd1d-a87a8822b773';
 const STATUS = '5ecd0002-6499-44aa-bd1d-a87a8822b773';
 const TIME   = '5ecd0003-6499-44aa-bd1d-a87a8822b773';
 const CONFIG = '5ecd0005-6499-44aa-bd1d-a87a8822b773';  // uint16 LE threshold mg
+const LIST   = '5ecd0006-6499-44aa-bd1d-a87a8822b773';  // saved impacts (binary)
+const TRACE  = '5ecd0007-6499-44aa-bd1d-a87a8822b773';  // write request, notify frames
 
 const $ = id => document.getElementById(id);
 let device = null, chStatus = null, chTime = null, chConfig = null, pollTimer = null;
+let chList = null, chTrace = null, listStored = -1, impacts = [], rx = null, shown = null;
 
 function setState(text, cls) {
   $('state').textContent = text;
@@ -134,14 +171,23 @@ async function connect() {
     chTime = await svc.getCharacteristic(TIME);
     // Config exists from fw 0.9.0; older firmware just hides the card.
     try { chConfig = await svc.getCharacteristic(CONFIG); } catch (e) { chConfig = null; }
+    // Impact list + trace exist from fw 0.10.0.
+    try {
+      chList = await svc.getCharacteristic(LIST);
+      chTrace = await svc.getCharacteristic(TRACE);
+      chTrace.addEventListener('characteristicvaluechanged', onTraceFrame);
+      await chTrace.startNotifications();
+    } catch (e) { chList = chTrace = null; }
     setState('connected', 'ok');
     msg('');
     $('connectCard').hidden = true;
     $('timeCard').hidden = false;
     $('devCard').hidden = false;
     $('trigCard').hidden = !chConfig;
+    $('impCard').hidden = !chList;
     await syncTime();          // always set the clock on connect
     await readConfig();
+    listStored = -1;           // readStatus() loads the list
     await readStatus();
     pollTimer = setInterval(readStatus, 2000);
   } catch (e) {
@@ -181,6 +227,164 @@ document.querySelectorAll('#thr input').forEach(r => r.addEventListener('change'
   await readConfig();          // show what the device actually uses
 }));
 
+// ---------------- saved impacts ----------------
+function fmtTime(epoch_s, synced) {
+  if (!synced) return 'time not set';
+  return new Date(epoch_s * 1000).toLocaleString(undefined, {month: 'short',
+    day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+}
+function fmtPeak(mg, axis) {
+  return (mg >= 0 ? '+' : '') + (mg / 1000).toFixed(2) + ' g ' + 'XYZ'[axis];
+}
+
+async function readList() {
+  if (!chList) return;
+  try {
+    const v = await chList.readValue();
+    const n = v.getUint8(0), cap = v.getUint8(1);
+    impacts = [];
+    for (let i = 0; i < n && 2 + 12 * (i + 1) <= v.byteLength; i++) {
+      const o = 2 + 12 * i;
+      impacts.push({id: v.getUint32(o, true), epoch: v.getUint32(o + 4, true),
+        peak: v.getInt16(o + 8, true), axis: v.getUint8(o + 10),
+        synced: (v.getUint8(o + 11) & 1) === 1});
+    }
+    $('impcount').textContent = '· ' + n + ' / ' + cap;
+    renderList();
+  } catch (e) { /* transient; retried on the next status change */ listStored = -1; }
+}
+
+function renderList() {
+  $('inone').hidden = impacts.length > 0;
+  const ul = $('ilist');
+  ul.innerHTML = '';
+  for (const I of impacts) {
+    const li = document.createElement('li');
+    if (shown === I.id) li.className = 'sel';
+    li.innerHTML = '<span>#' + I.id + ' · ' + fmtTime(I.epoch, I.synced) +
+      '</span><span class="pk">' + fmtPeak(I.peak, I.axis) + '</span>';
+    li.onclick = () => openImpact(I.id);
+    ul.appendChild(li);
+  }
+}
+
+async function openImpact(id) {
+  if (!chTrace) return;
+  shown = id;
+  renderList();
+  rx = {id, hdr: null, env: null, got: 0};
+  $('viewCard').hidden = false;
+  $('vtitle').textContent = 'Impact #' + id;
+  $('vmeta').textContent = 'Loading over Bluetooth…';
+  clearChart();
+  $('viewCard').scrollIntoView({behavior: 'smooth', block: 'start'});
+  const req = new DataView(new ArrayBuffer(6));
+  req.setUint32(0, id, true);
+  req.setUint16(4, 400, true);   // outline points
+  try { await chTrace.writeValue(req); }
+  catch (e) { $('vmeta').textContent = 'Request failed: ' + e.message; rx = null; }
+}
+
+// Notification frames: 1 header, 2 data, 3 end, 4 error (src/BleService.h).
+function onTraceFrame(ev) {
+  const v = ev.target.value;
+  if (!rx || v.byteLength < 2) return;
+  const type = v.getUint8(0);
+  if (type === 1 && v.byteLength >= 39) {
+    const h = {id: v.getUint32(1, true), samples: v.getUint32(5, true),
+      odr: v.getUint16(9, true), trig: v.getUint32(11, true), peakIdx: v.getUint32(15, true),
+      peak: v.getInt32(19, true), axis: v.getUint8(23), thr: v.getUint16(24, true),
+      k: v.getFloat32(26, true), epoch: v.getUint32(30, true), synced: (v.getUint8(34) & 1) === 1,
+      buckets: v.getUint16(35, true), bsize: v.getUint16(37, true)};
+    if (h.id !== rx.id) return;
+    rx.hdr = h;
+    rx.env = new Int16Array(h.buckets * 6);
+  } else if (type === 2 && rx.hdr) {
+    const start = v.getUint16(1, true), n = Math.floor((v.byteLength - 3) / 12);
+    for (let b = 0; b < n; b++) for (let k = 0; k < 6; k++) {
+      const i = (start + b) * 6 + k;
+      if (i < rx.env.length) rx.env[i] = v.getInt16(3 + (b * 6 + k) * 2, true);
+    }
+    rx.got = Math.max(rx.got, start + n);
+    $('vmeta').textContent = 'Loading… ' + Math.round(100 * rx.got / rx.hdr.buckets) + '%';
+  } else if (type === 3 && rx.hdr) {
+    const h = rx.hdr;
+    $('vmeta').textContent = fmtTime(h.epoch, h.synced) + ' · peak ' + fmtPeak(h.peak, h.axis) +
+      ' (from baseline) · threshold ' + (h.thr / 1000) + ' g · ' + h.samples + ' samples at ' +
+      h.odr + ' Hz';
+    drawTrace(h, rx.env);
+  } else if (type === 4) {
+    $('vmeta').textContent = ['', 'Impact not found (deleted?).', 'Device busy, try again.',
+      'Flash read error.'][v.getUint8(1)] || 'Error.';
+    if (v.getUint8(1) === 1) readList();
+  }
+}
+
+function clearChart() {
+  const cv = $('vchart');
+  cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+}
+
+function drawTrace(h, env) {
+  const cv = $('vchart'), cs = getComputedStyle(document.documentElement);
+  const col = n => cs.getPropertyValue(n).trim();
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const c = cv.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, W, H);
+  const g = h.k / 1000, nb = h.buckets;
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < env.length; i++) { const v = env[i] * g; if (v < lo) lo = v; if (v > hi) hi = v; }
+  const pad = (hi - lo) * 0.08 || 0.1; lo -= pad; hi += pad;
+  const padL = 40, padB = 18, top = 6, pw = W - padL - 4, ph = H - padB - top;
+  const X = b => padL + (b + 0.5) / nb * pw;
+  const Y = v => top + (hi - v) / (hi - lo) * ph;
+  c.font = '11px -apple-system, system-ui, sans-serif';
+  c.lineWidth = 1;
+  // grid: g on the left, seconds from trigger along the bottom
+  const raw = (hi - lo) / 4, p10 = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p10;
+  const ys = (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p10;
+  for (let v = Math.ceil(lo / ys) * ys; v <= hi; v += ys) {
+    const yy = Math.round(Y(v)) + 0.5;
+    c.strokeStyle = col('--grid'); c.beginPath(); c.moveTo(padL, yy); c.lineTo(W, yy); c.stroke();
+    c.fillStyle = col('--muted'); c.fillText(v.toFixed(ys < 1 ? 1 : 0) + 'g', 2, yy + 4);
+  }
+  const t0 = -h.trig / h.odr, t1 = (h.samples - h.trig) / h.odr;
+  for (let s = Math.ceil(t0); s <= t1; s++) {
+    const xx = Math.round(padL + (s - t0) / (t1 - t0) * pw) + 0.5;
+    c.strokeStyle = col('--grid'); c.beginPath(); c.moveTo(xx, top); c.lineTo(xx, top + ph); c.stroke();
+    c.fillStyle = col('--muted'); c.fillText(s + 's', xx - 6, H - 4);
+  }
+  // trigger marker
+  const tx = Math.round(X(h.trig / h.bsize)) + 0.5;
+  c.strokeStyle = col('--bad'); c.setLineDash([4, 3]);
+  c.beginPath(); c.moveTo(tx, top); c.lineTo(tx, top + ph); c.stroke(); c.setLineDash([]);
+  // envelopes
+  const cols = [col('--cx'), col('--cy'), col('--cz')];
+  c.lineWidth = 1.25;
+  for (let a = 0; a < 3; a++) {
+    c.strokeStyle = cols[a];
+    c.beginPath();
+    for (let b = 0; b < nb; b++) {
+      const mn = env[b * 6 + 2 * a] * g, mx = env[b * 6 + 2 * a + 1] * g;
+      if (b === 0) c.moveTo(X(b), Y(mx)); else c.lineTo(X(b), Y(mx));
+      c.lineTo(X(b), Y(mn));
+    }
+    c.stroke();
+  }
+  // peak marker on its axis, at the bucket extreme nearest the peak's sign
+  const pb = Math.min(nb - 1, Math.floor(h.peakIdx / h.bsize)), a = h.axis;
+  const pv = (h.peak >= 0 ? env[pb * 6 + 2 * a + 1] : env[pb * 6 + 2 * a]) * g;
+  c.strokeStyle = col('--fg'); c.lineWidth = 1.5;
+  c.beginPath(); c.arc(X(pb), Y(pv), 5, 0, 7); c.stroke();
+  c.fillStyle = col('--fg');
+  const lab = pv.toFixed(2) + ' g ' + 'XYZ'[a];
+  c.fillText(lab, Math.min(X(pb) + 8, W - c.measureText(lab).width - 2), Math.max(Y(pv) - 8, top + 10));
+}
+
+$('vclose').addEventListener('click', () => { $('viewCard').hidden = true; shown = null; renderList(); });
+
 async function readStatus() {
   if (!chStatus) return;
   try {
@@ -194,6 +398,10 @@ async function readStatus() {
     $('logger').textContent = j.logger || '–';
     $('impacts').textContent = j.stored !== undefined
       ? j.stored + ' / ' + j.capacity : '–';
+    if (chList && j.stored !== undefined && j.stored !== listStored) {
+      listStored = j.stored;
+      readList();
+    }
     if (j.time_synced) {
       const d = new Date(j.epoch_ms);
       $('devtime').textContent = d.toLocaleString(undefined, {
@@ -215,12 +423,15 @@ async function readStatus() {
 
 function onDisconnected() {
   clearInterval(pollTimer);
-  chStatus = chTime = chConfig = null;
+  chStatus = chTime = chConfig = chList = chTrace = null;
+  rx = null;
   setState('disconnected', 'bad');
   $('connectCard').hidden = false;
   $('timeCard').hidden = true;
   $('devCard').hidden = true;
   $('trigCard').hidden = true;
+  $('impCard').hidden = true;
+  $('viewCard').hidden = true;
   msg('Disconnected.');
 }
 
