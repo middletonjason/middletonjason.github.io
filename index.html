@@ -40,6 +40,12 @@
           font-size:13px; border:1px solid var(--line); }
   .pill.ok { color:var(--ok); border-color:var(--ok); }
   .pill.bad { color:var(--bad); border-color:var(--bad); }
+  .thr { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+  .thr label { display:flex; align-items:center; justify-content:center; gap:6px;
+               border:1px solid var(--line); border-radius:10px; padding:10px 0;
+               font-variant-numeric:tabular-nums; }
+  .thr label:has(input:checked) { border-color:var(--accent); color:var(--accent); }
+  .note { margin:10px 0 0; font-size:13px; color:var(--muted); }
   #msg { margin-top:10px; font-size:14px; color:var(--muted); min-height:1.4em; }
 </style>
 </head>
@@ -51,6 +57,18 @@
   <section class="card" id="connectCard">
     <button id="connect">Connect</button>
     <div id="msg"></div>
+  </section>
+
+  <section class="card" id="trigCard" hidden>
+    <h2>Trigger threshold</h2>
+    <div class="thr" id="thr">
+      <label><input type="radio" name="thr" value="1000"> 1 g</label>
+      <label><input type="radio" name="thr" value="2000"> 2 g</label>
+      <label><input type="radio" name="thr" value="3000"> 3 g</label>
+      <label><input type="radio" name="thr" value="4000"> 4 g</label>
+    </div>
+    <p class="note" id="thrmsg">Deviation from the resting value, on any axis.
+      Saved on the device.</p>
   </section>
 
   <section class="card" id="timeCard" hidden>
@@ -80,9 +98,10 @@
 const SVC    = '5ecd0001-6499-44aa-bd1d-a87a8822b773';
 const STATUS = '5ecd0002-6499-44aa-bd1d-a87a8822b773';
 const TIME   = '5ecd0003-6499-44aa-bd1d-a87a8822b773';
+const CONFIG = '5ecd0005-6499-44aa-bd1d-a87a8822b773';  // uint16 LE threshold mg
 
 const $ = id => document.getElementById(id);
-let device = null, chStatus = null, chTime = null, pollTimer = null;
+let device = null, chStatus = null, chTime = null, chConfig = null, pollTimer = null;
 
 function setState(text, cls) {
   $('state').textContent = text;
@@ -113,12 +132,16 @@ async function connect() {
     const svc = await server.getPrimaryService(SVC);
     chStatus = await svc.getCharacteristic(STATUS);
     chTime = await svc.getCharacteristic(TIME);
+    // Config exists from fw 0.9.0; older firmware just hides the card.
+    try { chConfig = await svc.getCharacteristic(CONFIG); } catch (e) { chConfig = null; }
     setState('connected', 'ok');
     msg('');
     $('connectCard').hidden = true;
     $('timeCard').hidden = false;
     $('devCard').hidden = false;
+    $('trigCard').hidden = !chConfig;
     await syncTime();          // always set the clock on connect
+    await readConfig();
     await readStatus();
     pollTimer = setInterval(readStatus, 2000);
   } catch (e) {
@@ -135,6 +158,28 @@ async function syncTime() {
   buf.setBigUint64(0, BigInt(Date.now()), true);   // little-endian ms
   await chTime.writeValue(buf);
 }
+
+async function readConfig() {
+  if (!chConfig) return;
+  try {
+    const v = await chConfig.readValue();
+    const mg = v.getUint16(0, true);
+    document.querySelectorAll('#thr input').forEach(r => { r.checked = +r.value === mg; });
+  } catch (e) { /* transient */ }
+}
+
+document.querySelectorAll('#thr input').forEach(r => r.addEventListener('change', async () => {
+  if (!chConfig) return;
+  const buf = new DataView(new ArrayBuffer(2));
+  buf.setUint16(0, +r.value, true);
+  try {
+    await chConfig.writeValue(buf);
+    $('thrmsg').textContent = 'Threshold set to ' + (r.value / 1000) + ' g (saved on the device).';
+  } catch (e) {
+    $('thrmsg').textContent = 'Setting threshold failed: ' + e.message;
+  }
+  await readConfig();          // show what the device actually uses
+}));
 
 async function readStatus() {
   if (!chStatus) return;
@@ -170,11 +215,12 @@ async function readStatus() {
 
 function onDisconnected() {
   clearInterval(pollTimer);
-  chStatus = chTime = null;
+  chStatus = chTime = chConfig = null;
   setState('disconnected', 'bad');
   $('connectCard').hidden = false;
   $('timeCard').hidden = true;
   $('devCard').hidden = true;
+  $('trigCard').hidden = true;
   msg('Disconnected.');
 }
 
