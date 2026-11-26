@@ -33,6 +33,7 @@
            border:1px solid var(--accent); background:var(--accent);
            color:#fff; cursor:pointer; }
   button.secondary { background:transparent; color:var(--accent); }
+  button.danger { background:transparent; color:var(--bad); border-color:var(--bad); }
   button:disabled { opacity:.5; }
   .row { display:flex; gap:10px; }
   .row button { flex:1; }
@@ -102,7 +103,10 @@
     </div>
     <p class="note">Outline view (min/max of each slice, so no spike is hidden). Full
       resolution and CSV: web page over USB.</p>
-    <p style="margin:12px 0 0"><button id="vclose" class="secondary">Close</button></p>
+    <p class="row" style="margin:12px 0 0">
+      <button id="vdel" class="danger">Delete</button>
+      <button id="vclose" class="secondary">Close</button>
+    </p>
   </section>
 
   <section class="card" id="timeCard" hidden>
@@ -135,10 +139,11 @@ const TIME   = '5ecd0003-6499-44aa-bd1d-a87a8822b773';
 const CONFIG = '5ecd0005-6499-44aa-bd1d-a87a8822b773';  // uint16 LE threshold mg
 const LIST   = '5ecd0006-6499-44aa-bd1d-a87a8822b773';  // saved impacts (binary)
 const TRACE  = '5ecd0007-6499-44aa-bd1d-a87a8822b773';  // write request, notify frames
+const CONTROL = '5ecd0004-6499-44aa-bd1d-a87a8822b773'; // u8 op (1 = delete) + u32 id
 
 const $ = id => document.getElementById(id);
 let device = null, chStatus = null, chTime = null, chConfig = null, pollTimer = null;
-let chList = null, chTrace = null, listStored = -1, impacts = [], rx = null, shown = null;
+let chControl = null, chList = null, chTrace = null, listStored = -1, impacts = [], rx = null, shown = null;
 
 function setState(text, cls) {
   $('state').textContent = text;
@@ -178,6 +183,8 @@ async function connect() {
       chTrace.addEventListener('characteristicvaluechanged', onTraceFrame);
       await chTrace.startNotifications();
     } catch (e) { chList = chTrace = null; }
+    // Delete exists from fw 0.10.1; older firmware hides the button.
+    try { chControl = await svc.getCharacteristic(CONTROL); } catch (e) { chControl = null; }
     setState('connected', 'ok');
     msg('');
     $('connectCard').hidden = true;
@@ -274,6 +281,8 @@ async function openImpact(id) {
   renderList();
   rx = {id, hdr: null, env: null, got: 0};
   $('viewCard').hidden = false;
+  $('vdel').hidden = !chControl;
+  $('vdel').disabled = false;
   $('vtitle').textContent = 'Impact #' + id;
   $('vmeta').textContent = 'Loading over Bluetooth…';
   clearChart();
@@ -385,6 +394,34 @@ function drawTrace(h, env) {
 
 $('vclose').addEventListener('click', () => { $('viewCard').hidden = true; shown = null; renderList(); });
 
+$('vdel').addEventListener('click', async () => {
+  const id = shown;
+  if (id === null || !chControl) return;
+  if (!confirm('Delete impact #' + id + ' from the device?\nThis cannot be undone.')) return;
+  $('vdel').disabled = true;
+  try {
+    const cmd = new DataView(new ArrayBuffer(5));
+    cmd.setUint8(0, 0x01);
+    cmd.setUint32(1, id, true);
+    await chControl.writeValue(cmd);
+    await new Promise(r => setTimeout(r, 300)); // device updates the list
+    await readList();
+    if (impacts.some(I => I.id === id)) {
+      $('vmeta').textContent = 'Delete refused (the impact may still be saving). Try again.';
+      $('vdel').disabled = false;
+      return;
+    }
+    rx = null;
+    shown = null;
+    $('viewCard').hidden = true;
+    renderList();
+    $('impcount').textContent += ' · #' + id + ' deleted';
+  } catch (e) {
+    $('vmeta').textContent = 'Delete failed: ' + e.message;
+    $('vdel').disabled = false;
+  }
+});
+
 async function readStatus() {
   if (!chStatus) return;
   try {
@@ -423,7 +460,7 @@ async function readStatus() {
 
 function onDisconnected() {
   clearInterval(pollTimer);
-  chStatus = chTime = chConfig = chList = chTrace = null;
+  chStatus = chTime = chConfig = chList = chTrace = chControl = null;
   rx = null;
   setState('disconnected', 'bad');
   $('connectCard').hidden = false;
