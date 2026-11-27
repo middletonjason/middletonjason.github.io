@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Transit Mode Console</title>
+<title>Transit Mode</title>
 <style>
   :root {
     --bg: #15181c;
@@ -14,20 +14,17 @@
     --text-dim: #8a909b;
     --text-dimmer: #5b6069;
     --accent: #e3a23d;
-    --accent-dim: #8a6a35;
     --success: #4caf6d;
-    --success-dim: #2d4a37;
+    --success-dim: #203528;
     --danger: #e2584f;
-    --danger-dim: #4a2d2b;
+    --danger-dim: #3a2422;
     --info: #5b8def;
-    --info-dim: #2a3a52;
+    --info-dim: #1e2a3d;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     color-scheme: dark;
   }
-
   * { box-sizing: border-box; }
-
   html, body {
     height: 100%;
     margin: 0;
@@ -37,7 +34,6 @@
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-
   body::before {
     content: "";
     position: fixed;
@@ -48,127 +44,26 @@
   }
 
   .wrap {
-    max-width: 1040px;
+    min-height: 100%;
+    max-width: 480px;
     margin: 0 auto;
-    padding: 24px 20px 60px;
-  }
-
-  header {
+    padding: 20px 20px 40px;
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 14px;
-    padding-bottom: 18px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 14px;
-  }
-
-  .status-dot {
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
-    background: var(--text-dimmer);
-    flex-shrink: 0;
-    transition: background 0.2s;
-  }
-  .status-dot.busy { background: var(--info); animation: pulse 0.6s ease-in-out infinite; }
-  .status-dot.error { background: var(--danger); animation: pulse 0.5s ease-in-out infinite; }
-  .status-dot.ok { background: var(--success); }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.25; }
+    flex-direction: column;
   }
 
   h1 {
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 600;
+    text-align: center;
+    margin: 6px 0 24px;
+    color: var(--text-dim);
     letter-spacing: 0.01em;
-    margin: 0;
-    white-space: nowrap;
-  }
-
-  .scan-state-label {
-    font-size: 13px;
-    color: var(--text-dim);
-    margin-right: auto;
-  }
-
-  .mode-toggle {
-    display: inline-flex;
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    overflow: hidden;
-    background: var(--panel);
-  }
-  .mode-toggle button {
-    border: none;
-    background: transparent;
-    color: var(--text-dim);
-    font-size: 13px;
-    font-family: var(--sans);
-    padding: 7px 13px;
-    cursor: pointer;
-  }
-  .mode-toggle button.active { background: var(--panel-2); color: var(--text); }
-  .mode-toggle button.active.decommission { color: var(--accent); }
-  .mode-toggle button:not(.active):hover { color: var(--text); }
-
-  button { font-family: var(--sans); }
-  .btn {
-    border: 1px solid var(--border);
-    background: var(--panel-2);
-    color: var(--text);
-    padding: 8px 16px;
-    border-radius: 7px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-  }
-  .btn:hover { border-color: var(--text-dimmer); }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1406; }
-  .btn.primary:hover { filter: brightness(1.08); }
-  .btn.ghost { background: transparent; }
-  .btn.small { padding: 5px 10px; font-size: 12px; }
-  .btn.tiny { padding: 3px 8px; font-size: 11px; border-radius: 5px; }
-
-  input[type="text"] {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 7px;
-    padding: 7px 10px;
-    font-size: 13px;
-    font-family: var(--sans);
-  }
-  input[type="text"]:focus, button:focus-visible {
-    outline: 2px solid var(--info);
-    outline-offset: 1px;
-  }
-  input[type="text"]::placeholder { color: var(--text-dimmer); }
-
-  .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
-  .toolbar .spacer { flex: 1 1 auto; }
-  .batch-field { display: flex; align-items: center; gap: 7px; }
-  .batch-field label { font-size: 12px; color: var(--text-dim); }
-
-  .hint {
-    font-size: 12px;
-    color: var(--text-dimmer);
-    margin: 0 0 16px;
-    line-height: 1.5;
   }
 
   .banner {
-    border: 1px solid var(--danger-dim);
-    background: rgba(226, 88, 79, 0.08);
+    border: 1px solid var(--danger);
+    background: rgba(226, 88, 79, 0.1);
     color: #f0b2ad;
     border-radius: 8px;
     padding: 13px 15px;
@@ -178,86 +73,96 @@
   }
   .banner strong { color: #fff; }
 
-  .summary {
+  /* ---------- status card ---------- */
+  .status-card {
+    flex: 1;
     display: flex;
-    gap: 22px;
-    flex-wrap: wrap;
-    padding: 12px 16px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 9px;
-    margin-bottom: 14px;
-    font-size: 13px;
-  }
-  .summary .stat b { font-variant-numeric: tabular-nums; font-size: 15px; margin-right: 5px; }
-  .summary .stat { color: var(--text-dim); }
-  .summary .stat.found b { color: var(--text); }
-  .summary .stat.done b { color: var(--success); }
-  .summary .stat.failed b { color: var(--danger); }
-
-  .table-scroll {
-    border: 1px solid var(--border);
-    border-radius: 9px;
-    overflow: auto;
-    background: var(--panel);
-  }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 620px; }
-  thead th {
-    text-align: left;
-    font-weight: 500;
-    color: var(--text-dim);
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    background: var(--panel);
-    white-space: nowrap;
-  }
-  tbody td {
-    padding: 9px 14px;
-    border-bottom: 1px solid var(--border);
-    font-family: var(--mono);
-    white-space: nowrap;
-  }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover { background: var(--panel-2); }
-  td.name { font-weight: 600; }
-  td.family { color: var(--text-dim); font-family: var(--sans); font-size: 12px; }
-
-  .empty-row td {
-    font-family: var(--sans);
-    color: var(--text-dimmer);
-    text-align: center;
-    padding: 34px 14px;
-  }
-
-  .badge {
-    display: inline-flex;
+    flex-direction: column;
     align-items: center;
-    gap: 6px;
-    font-family: var(--sans);
-    font-size: 12px;
-    font-weight: 500;
-    padding: 3px 9px;
-    border-radius: 20px;
+    justify-content: center;
+    gap: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px 24px;
+    min-height: 260px;
+    text-align: center;
+    transition: border-color 0.2s, background 0.2s;
   }
-  .badge.discovered { background: var(--panel-2); color: var(--text-dim); border: 1px solid var(--border); }
-  .badge.connecting, .badge.writing { background: var(--info-dim); color: #aecaf7; }
-  .badge.set { background: var(--success-dim); color: #a9e0bb; }
-  .badge.failed { background: var(--danger-dim); color: #f0b2ad; }
-  .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .status-card.busy { border-color: var(--info); background: var(--info-dim); }
+  .status-card.success { border-color: var(--success); background: var(--success-dim); }
+  .status-card.error { border-color: var(--danger); background: var(--danger-dim); }
 
-  .log-toggle {
+  .status-ring {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 3px solid var(--text-dimmer);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+  .status-card.busy .status-ring {
+    border-color: var(--info);
+    border-top-color: transparent;
+    animation: spin 0.9s linear infinite;
+  }
+  .status-card.success .status-ring { border-color: var(--success); }
+  .status-card.error .status-ring { border-color: var(--danger); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .status-title {
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .status-detail {
+    font-size: 13px;
+    color: var(--text-dim);
+    max-width: 320px;
+    line-height: 1.5;
+  }
+  .status-card.success .status-title { color: var(--success); }
+  .status-card.error .status-title { color: var(--danger); }
+
+  /* ---------- button ---------- */
+  .scan-btn {
+    margin-top: 22px;
+    width: 100%;
+    border: none;
+    background: var(--accent);
+    color: #1a1406;
+    font-family: var(--sans);
+    font-size: 16px;
+    font-weight: 600;
+    padding: 16px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .scan-btn:active { filter: brightness(0.95); }
+  .scan-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .session-count {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dimmer);
     margin-top: 14px;
+  }
+
+  /* ---------- log ---------- */
+  .log-toggle {
+    margin-top: 22px;
     background: none;
     border: none;
-    color: var(--text-dim);
+    color: var(--text-dimmer);
     font-size: 12px;
     cursor: pointer;
     padding: 6px 2px;
     font-family: var(--sans);
+    align-self: center;
   }
-  .log-toggle:hover { color: var(--text); }
+  .log-toggle:hover { color: var(--text-dim); }
   .log-panel {
     display: none;
     margin-top: 6px;
@@ -265,87 +170,43 @@
     border: 1px solid var(--border);
     border-radius: 9px;
     padding: 10px 12px;
-    max-height: 220px;
+    max-height: 200px;
     overflow-y: auto;
     font-family: var(--mono);
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--text-dim);
     line-height: 1.6;
   }
   .log-panel.open { display: block; }
   .log-panel .t { color: var(--text-dimmer); margin-right: 8px; }
-
-  @media (max-width: 600px) {
-    .wrap { padding: 16px 12px 50px; }
-    h1 { font-size: 15px; }
-    .scan-state-label { width: 100%; order: 10; margin-right: 0; }
-  }
 </style>
 </head>
 <body>
 <div class="wrap">
-
-  <header>
-    <span class="status-dot" id="statusDot"></span>
-    <h1>Transit Mode Console</h1>
-    <span class="scan-state-label" id="scanStateLabel">Ready</span>
-    <div class="mode-toggle" role="group" aria-label="Mode">
-      <button id="modeDiscover" class="active">Discover</button>
-      <button id="modeDecommission">Discover &amp; Set Transit Mode</button>
-    </div>
-  </header>
+  <h1>Transit Mode</h1>
 
   <div id="unsupportedBanner" class="banner" style="display:none;">
     Web Bluetooth isn't available here. On iPhone/iPad, open this page in the <strong>Bluefy</strong> app.
     On desktop or Android, use <strong>Chrome</strong>, <strong>Edge</strong>, or <strong>Samsung Internet</strong>.
-    It isn't available in Safari or Firefox.
   </div>
 
-  <div class="toolbar">
-    <button class="btn primary" id="scanBtn">Scan for device</button>
-    <div class="batch-field">
-      <label for="batchLabel">Carton / batch label</label>
-      <input type="text" id="batchLabel" placeholder="e.g. PALLET-14-CTN-03">
-    </div>
-    <div class="spacer"></div>
-    <button class="btn small" id="exportBtn">Export CSV</button>
-    <button class="btn small ghost" id="clearBtn">Clear list</button>
-  </div>
-  <p class="hint" id="modeHint"></p>
-
-  <div class="summary">
-    <span class="stat found">Selected<b id="statFound">0</b></span>
-    <span class="stat done">Transit mode set<b id="statDone">0</b></span>
-    <span class="stat failed">Failed<b id="statFailed">0</b></span>
+  <div class="status-card" id="statusCard">
+    <div class="status-ring" id="statusRing">•</div>
+    <div class="status-title" id="statusTitle">Ready</div>
+    <div class="status-detail" id="statusDetail">Tap below, then pick the unit you want to put in transit mode.</div>
   </div>
 
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Family</th>
-          <th>First selected</th>
-          <th>Last seen</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="deviceRows">
-        <tr class="empty-row"><td colspan="5">No devices yet. Tap "Scan for device" to open the picker.</td></tr>
-      </tbody>
-    </table>
-  </div>
+  <button class="scan-btn" id="scanBtn">Scan &amp; set transit mode</button>
+  <div class="session-count" id="sessionCount">0 set this session</div>
 
-  <button class="log-toggle" id="logToggle">▸ Activity log</button>
+  <button class="log-toggle" id="logToggle">▸ Debug log</button>
   <div class="log-panel" id="logPanel"></div>
-
 </div>
 
 <script>
 (() => {
   "use strict";
 
-  // ---------- config ----------
   const SERVICE_UUID = "54571400-7c00-11e9-8f9e-2a86e4085a59";
   const CHAR_UUID    = "54571480-7c00-11e9-8f9e-2a86e4085a59";
   const TRANSIT_KEY  = new Uint8Array([
@@ -354,53 +215,30 @@
     0x81, 0xe2, 0x31, 0xa2, 0x9d, 0xac, 0x10, 0x10, 0x57, 0x58
   ]);
 
-  // Order matters only for the "family" label shown, not for matching.
   const NAME_FILTERS = [
     { namePrefix: "DriveDot-" },
     { namePrefix: "QMHConnect-" },
     { namePrefix: "QMH-" },
     { namePrefix: "IMS-" },
   ];
-  const FAMILY_PATTERNS = [
-    { key: "DriveDot",   re: /^DriveDot-/i },
-    { key: "QMHConnect", re: /^QMHConnect-/i },
-    { key: "QMH",        re: /^QMH-/i },
-    { key: "IMS",        re: /^IMS-/i },
-  ];
   const MAX_ATTEMPTS = 3;
+  const RETRY_DELAYS = [400, 1000, 1800]; // backoff between attempts, ms
 
-  function matchFamily(name) {
-    if (!name) return null;
-    for (const f of FAMILY_PATTERNS) if (f.re.test(name)) return f.key;
-    return null;
-  }
-
-  // ---------- state ----------
-  const devices = new Map(); // id -> record
-  let mode = "discover"; // "discover" | "decommission"
-  let decommissionConfirmed = false;
-  let rowIdCounter = 0;
-
-  // ---------- dom ----------
   const $ = (id) => document.getElementById(id);
-  const statusDot = $("statusDot");
-  const scanStateLabel = $("scanStateLabel");
-  const modeDiscoverBtn = $("modeDiscover");
-  const modeDecommissionBtn = $("modeDecommission");
-  const unsupportedBanner = $("unsupportedBanner");
+  const statusCard = $("statusCard");
+  const statusRing = $("statusRing");
+  const statusTitle = $("statusTitle");
+  const statusDetail = $("statusDetail");
   const scanBtn = $("scanBtn");
-  const batchLabelInput = $("batchLabel");
-  const exportBtn = $("exportBtn");
-  const clearBtn = $("clearBtn");
-  const rowsEl = $("deviceRows");
-  const statFound = $("statFound");
-  const statDone = $("statDone");
-  const statFailed = $("statFailed");
+  const sessionCount = $("sessionCount");
   const logToggle = $("logToggle");
   const logPanel = $("logPanel");
-  const modeHint = $("modeHint");
+  const unsupportedBanner = $("unsupportedBanner");
 
-  // ---------- logging ----------
+  let busy = false;
+  let setCount = 0;
+  let currentDevice = null; // the currently connected BluetoothDevice, if any
+
   function log(msg) {
     const t = new Date().toLocaleTimeString();
     const line = document.createElement("div");
@@ -415,249 +253,107 @@
   }
   logToggle.addEventListener("click", () => {
     logPanel.classList.toggle("open");
-    logToggle.textContent = (logPanel.classList.contains("open") ? "▾" : "▸") + " Activity log";
+    logToggle.textContent = (logPanel.classList.contains("open") ? "▾" : "▸") + " Debug log";
   });
 
-  // ---------- support check ----------
   if (!navigator.bluetooth || !navigator.bluetooth.requestDevice) {
     unsupportedBanner.style.display = "block";
     scanBtn.disabled = true;
   }
 
-  function setDotState(state) {
-    statusDot.className = "status-dot" + (state ? " " + state : "");
-  }
-
-  function updateHint() {
-    modeHint.textContent = mode === "decommission"
-      ? "Each tap opens the device picker — pick the unit you want to put in transit mode. It's connected to and written immediately on selection."
-      : "Each tap opens the device picker — pick a unit to add it to the list below. Nothing is written to it.";
-  }
-
-  // ---------- mode toggle ----------
-  function setMode(next) {
-    if (next === mode) return;
-    if (next === "decommission" && !decommissionConfirmed) {
-      const ok = confirm(
-        "Switch to \"Discover & Set Transit Mode\"?\n\n" +
-        "Every device you pick from the scan dialog from now on will be connected to " +
-        "and written with the transit-mode command right away. This puts real units " +
-        "into deep sleep and cannot be undone from this app.\n\n" +
-        "Continue?"
-      );
-      if (!ok) return;
-      decommissionConfirmed = true;
-    }
-    mode = next;
-    modeDiscoverBtn.classList.toggle("active", mode === "discover");
-    modeDecommissionBtn.classList.toggle("active", mode === "decommission");
-    modeDecommissionBtn.classList.toggle("decommission", mode === "decommission");
-    scanBtn.textContent = mode === "decommission" ? "Scan & set transit mode" : "Scan for device";
-    updateHint();
-    log(`Mode set to "${mode === "decommission" ? "Discover & Set Transit Mode" : "Discover"}"`);
-  }
-  modeDiscoverBtn.addEventListener("click", () => setMode("discover"));
-  modeDecommissionBtn.addEventListener("click", () => setMode("decommission"));
-  updateHint();
-
-  // ---------- rendering ----------
-  function statusMeta(status) {
-    switch (status) {
-      case "discovered": return { cls: "discovered", label: "Discovered" };
-      case "connecting": return { cls: "connecting", label: "Connecting…" };
-      case "writing":    return { cls: "writing",    label: "Writing key…" };
-      case "set":        return { cls: "set",        label: "Transit mode set" };
-      case "failed":     return { cls: "failed",      label: "Failed" };
-      default:           return { cls: "discovered", label: status };
-    }
-  }
-  function fmtTime(ts) { return new Date(ts).toLocaleTimeString([], { hour12: false }); }
-
-  function renderRow(rec) {
-    let tr = document.getElementById("row-" + rec.rowId);
-    if (!tr) {
-      const empty = rowsEl.querySelector(".empty-row");
-      if (empty) empty.remove();
-      tr = document.createElement("tr");
-      tr.id = "row-" + rec.rowId;
-      rowsEl.appendChild(tr);
-    }
-    const meta = statusMeta(rec.status);
-    const retryBtn = (rec.status === "failed")
-      ? `<button class="btn tiny" data-retry="${rec.rowId}" style="margin-left:8px;">Retry</button>`
-      : "";
-    tr.innerHTML = `
-      <td class="name">${escapeHtml(rec.name)}</td>
-      <td class="family">${escapeHtml(rec.family)}</td>
-      <td>${fmtTime(rec.firstSeen)}</td>
-      <td>${fmtTime(rec.lastSeen)}</td>
-      <td><span class="badge ${meta.cls}"><span class="dot"></span>${meta.label}${rec.attempts > 0 && rec.status !== "set" ? ` (try ${rec.attempts})` : ""}</span>${retryBtn}</td>
-    `;
-  }
-
-  rowsEl.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-retry]");
-    if (!btn) return;
-    const rowId = Number(btn.getAttribute("data-retry"));
-    for (const rec of devices.values()) {
-      if (rec.rowId === rowId) { processDevice(rec); break; }
-    }
-  });
-
-  function refreshStats() {
-    let found = devices.size, done = 0, failed = 0;
-    for (const rec of devices.values()) {
-      if (rec.status === "set") done++;
-      if (rec.status === "failed") failed++;
-    }
-    statFound.textContent = found;
-    statDone.textContent = done;
-    statFailed.textContent = failed;
-  }
-
-  // ---------- scan (picker) ----------
-  async function scanForDevice() {
-    if (!navigator.bluetooth || !navigator.bluetooth.requestDevice) return;
-    scanStateLabel.textContent = "Opening device picker…";
-    try {
-      const device = await navigator.bluetooth.requestDevice({
-        filters: NAME_FILTERS,
-        optionalServices: [SERVICE_UUID],
-      });
-      await handleSelectedDevice(device);
-    } catch (err) {
-      if (err.name === "NotFoundError") {
-        log("No device selected (cancelled, or none in range).");
-      } else {
-        log("Scan error: " + err.message);
-        setDotState("error");
-      }
-    } finally {
-      scanStateLabel.textContent = "Ready";
-    }
-  }
-  scanBtn.addEventListener("click", scanForDevice);
-
-  async function handleSelectedDevice(device) {
-    const name = device.name || "(unnamed device)";
-    const family = matchFamily(name) || "Unrecognised";
-    const now = Date.now();
-    let rec = devices.get(device.id);
-
-    if (!rec) {
-      rec = {
-        id: device.id, rowId: ++rowIdCounter, device, name, family,
-        firstSeen: now, lastSeen: now, status: "discovered", attempts: 0,
-      };
-      devices.set(device.id, rec);
-      log(`Selected ${family} unit: ${name}`);
-    } else {
-      rec.lastSeen = now;
-      log(`${name} selected again`);
-    }
-    renderRow(rec);
-    refreshStats();
-
-    if (family === "Unrecognised") {
-      log(`WARNING: "${name}" doesn't match any known family name — leaving it alone.`);
-      return;
-    }
-
-    if (mode === "decommission") {
-      if (rec.status === "set") {
-        log(`${name} is already marked as transit mode set — skipping. Use Retry if you need to re-send.`);
-        return;
-      }
-      await processDevice(rec);
-    }
+  function setStatus(state, title, detail) {
+    statusCard.className = "status-card" + (state ? " " + state : "");
+    statusTitle.textContent = title;
+    statusDetail.textContent = detail || "";
+    const ringGlyph = { idle: "•", busy: "", success: "✓", error: "✕" }[state] || "•";
+    statusRing.textContent = ringGlyph;
   }
 
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-  async function processDevice(rec) {
-    rec.status = "connecting";
-    renderRow(rec);
-    setDotState("busy");
-    log(`Connecting to ${rec.name}…`);
+  async function ensurePreviousConnectionClosed() {
+    // Guards against stacking a new connection on top of one that hasn't
+    // finished tearing down yet, which is a common cause of a connect
+    // silently failing right after a previous unit was processed.
+    if (currentDevice && currentDevice.gatt && currentDevice.gatt.connected) {
+      try { currentDevice.gatt.disconnect(); } catch (e) {}
+      await sleep(300);
+    }
+    currentDevice = null;
+  }
+
+  async function scanAndSet() {
+    if (busy) return;
+    busy = true;
+    scanBtn.disabled = true;
+
+    await ensurePreviousConnectionClosed();
+
+    setStatus("busy", "Opening picker…", "Choose the unit from the list.");
+    let device;
+    try {
+      device = await navigator.bluetooth.requestDevice({
+        filters: NAME_FILTERS,
+        optionalServices: [SERVICE_UUID],
+      });
+    } catch (err) {
+      if (err.name === "NotFoundError") {
+        setStatus("idle", "Ready", "Cancelled, or no matching unit in range. Tap to try again.");
+      } else {
+        log("Picker error: " + err.message);
+        setStatus("error", "Picker error", err.message);
+      }
+      busy = false;
+      scanBtn.disabled = false;
+      return;
+    }
+
+    currentDevice = device;
+    const name = device.name || "(unnamed device)";
+    log(`Selected: ${name}`);
+
+    // Give iOS/Bluefy a moment to finish its own handshake after the
+    // system picker hands the device back, before we try to connect.
+    setStatus("busy", `Preparing ${name}`, "Settling connection…");
+    await sleep(600);
+
+    await writeTransitMode(device, name, 1);
+
+    busy = false;
+    scanBtn.disabled = false;
+  }
+  scanBtn.addEventListener("click", scanAndSet);
+
+  async function writeTransitMode(device, name, attempt) {
+    setStatus("busy", `Connecting to ${name}`, attempt > 1 ? `Retry ${attempt} of ${MAX_ATTEMPTS}…` : "Attempt 1…");
 
     let server;
     try {
-      server = await rec.device.gatt.connect();
-      log(`Connected to ${rec.name}`);
+      server = await device.gatt.connect();
+      log(`${name}: connected (attempt ${attempt})`);
 
-      rec.status = "writing";
-      renderRow(rec);
-
+      setStatus("busy", `Writing to ${name}`, "Sending transit-mode command…");
       const service = await server.getPrimaryService(SERVICE_UUID);
       const char = await service.getCharacteristic(CHAR_UUID);
       await char.writeValueWithResponse(TRANSIT_KEY);
       await sleep(1000);
 
-      rec.status = "set";
-      rec.lastSeen = Date.now();
-      renderRow(rec);
-      refreshStats();
-      setDotState("ok");
-      log(`${rec.name} — transit mode key written. It should stop advertising within a few seconds; scan again later to confirm it's gone quiet.`);
+      setCount++;
+      sessionCount.textContent = `${setCount} set this session`;
+      log(`${name}: transit mode key written OK`);
+      setStatus("success", `${name} set`, "It should stop advertising within a few seconds. Tap below for the next unit.");
     } catch (err) {
-      log(`Error on ${rec.name}: ${err.message}`);
-      rec.attempts++;
-      if (rec.attempts < MAX_ATTEMPTS) {
-        log(`Retrying ${rec.name} (attempt ${rec.attempts + 1} of ${MAX_ATTEMPTS})…`);
-        renderRow(rec);
-        await sleep(500);
-        return processDevice(rec);
+      log(`${name}: error on attempt ${attempt} — [${err.name}] ${err.message}`);
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(RETRY_DELAYS[attempt - 1] || 1000);
+        return writeTransitMode(device, name, attempt + 1);
       }
-      rec.status = "failed";
-      renderRow(rec);
-      refreshStats();
-      setDotState("error");
-      log(`${rec.name} — giving up after ${MAX_ATTEMPTS} attempts`);
+      setStatus("error", `Failed: ${name}`, `${err.message} — tap below to try again.`);
     } finally {
       try { if (server && server.connected) server.disconnect(); } catch (e) {}
+      currentDevice = null;
     }
   }
-
-  // ---------- export / clear ----------
-  function toCsv() {
-    const rows = [["name", "family", "first_selected", "last_seen", "status", "attempts", "batch_label"]];
-    const batch = batchLabelInput.value.trim();
-    for (const rec of devices.values()) {
-      rows.push([
-        rec.name, rec.family,
-        new Date(rec.firstSeen).toISOString(),
-        new Date(rec.lastSeen).toISOString(),
-        statusMeta(rec.status).label,
-        String(rec.attempts),
-        batch,
-      ]);
-    }
-    return rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\r\n");
-  }
-
-  exportBtn.addEventListener("click", () => {
-    const csv = toCsv();
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    a.href = url;
-    a.download = `transit-mode-log-${stamp}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  });
-
-  clearBtn.addEventListener("click", () => {
-    if (devices.size && !confirm("Clear the current device list? This only clears the on-screen list, it does not affect any hardware.")) return;
-    devices.clear();
-    rowsEl.innerHTML = '<tr class="empty-row"><td colspan="5">No devices yet. Tap "Scan for device" to open the picker.</td></tr>';
-    refreshStats();
-    log("List cleared");
-  });
-
-  refreshStats();
 })();
 </script>
 </body>
